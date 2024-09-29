@@ -134,8 +134,8 @@ def checkout(cart_id: int, cart_checkout: CartCheckout):
         gold = data[0][2]
         # if 0 inventory...
         if num_green_potions == 0:
-            print("Out of potions! Come back later.")
-            return "Out of potions! Come back later."
+            print("Sorry, we're currently out of potions")
+            return "Sorry, we're currently out of potions"
         # otherwise, authorize transaction
         sql_to_execute = \
             f"""UPDATE global_inventory
