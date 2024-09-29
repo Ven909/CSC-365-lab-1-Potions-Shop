@@ -6,12 +6,15 @@ import sqlalchemy
 from src import database as db
 
 
-
 router = APIRouter(
     prefix="/carts",
     tags=["cart"],
     dependencies=[Depends(auth.get_api_key)],
 )
+
+# make a global cart ID variable for ease
+cart_id = 0
+cart_table = {} 
 
 class search_sort_options(str, Enum):
     customer_name = "customer_name"
@@ -89,7 +92,13 @@ def post_visits(visit_id: int, customers: list[Customer]):
 @router.post("/")
 def create_cart(new_cart: Customer):
     """ """
-    return {"cart_id": 1}
+    global cart_id 
+    global cart_table
+
+    cart_id += 1
+    cart_table[cart_id] = {}
+
+    return {"cart_id": cart_id}
 
 
 class CartItem(BaseModel):
@@ -99,9 +108,13 @@ class CartItem(BaseModel):
 @router.post("/{cart_id}/items/{item_sku}")
 def set_item_quantity(cart_id: int, item_sku: str, cart_item: CartItem):
     """ """
-
+    
+    if (cart_id not in cart_table):
+        cart_table[cart_id] = {}
+    using_cart = cart_table[cart_id]
+    using_cart[item_sku] = cart_item.quantity
+    
     return "OK"
-
 
 class CartCheckout(BaseModel):
     payment: str
@@ -109,5 +122,62 @@ class CartCheckout(BaseModel):
 @router.post("/{cart_id}/checkout")
 def checkout(cart_id: int, cart_checkout: CartCheckout):
     """ """
+    # green potion cart checkout
+    with db.engine.begin() as connection: 
+        sql_to_execute = \
+            """SELECT * 
+            FROM global_inventory;
+            """
+        result = connection.execute(sqlalchemy.text(sql_to_execute))
+        data = result.fetchall() 
+        num_green_potions = data[0][0]
+        gold = data[0][2]
+        # if 0 inventory...
+        if num_green_potions == 0:
+            print("Out of potions! Come back later.")
+            return "Out of potions! Come back later."
+        # otherwise, authorize transaction
+        sql_to_execute = \
+            f"""UPDATE global_inventory
+            SET num_green_potions = {num_green_potions - 1},
+            gold = {gold + 50};
+            """
+        result = connection.execute(sqlalchemy.text(sql_to_execute))
+        
+        # show transaction details 
+        sql_to_execute = \
+            """SELECT * 
+            FROM global_inventory;
+            """
+        result = connection.execute(sqlalchemy.text(sql_to_execute))
+        data = result.fetchall() 
+        print("Checkout Result: ", data) 
+
+    '''
+    using_cart = cart_table[cart_id]
+
+    with db.engine.begin() as connection:
+        for quantity in using_cart.values():
+            result = connection.execute(sqlalchemy.text("SELECT num_green_potions, gold FROM global_inventory")).first()
+            curr_grn_potions = result.num_green_potions
+            curr_gold = result.gold
+
+        # if sufficient inventory of green, authorize payment
+        if curr_grn_potions >= quantity:
+            curr_grn_potions -= quantity        # adequate green deducted
+            curr_gold += quantity * 50         # 50 coins added to inventory 
+
+        # stats for the specific transaction:
+        bought_pots = 0
+        transaction_gold = 0
+        
+        bought_pots += quantity
+        transaction_gold += quantity * 50
+
+    # update green barrel & gold inventory after the transaction
+    connection.execute(sqlalchemy.text("UPDATE global_inventory SET gold = :curr_gold"), [{"curr_gold": curr_gold }])
+    connection.execute(sqlalchemy.text("UPDATE global_inventory SET num_green_potions = :curr_grn_potions"))
+    '''
 
     return {"total_potions_bought": 1, "total_gold_paid": 50}
+    
