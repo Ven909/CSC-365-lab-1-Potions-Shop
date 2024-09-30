@@ -47,17 +47,18 @@ def get_wholesale_purchase_plan(wholesale_catalog: list[Barrel]):
     # version 1: working for insufficent gold less than 10 potions
     if (green_potions < 10):
         for barrel in wholesale_catalog:
-            if gold >= barrel.price:
-                return [
-                    {
-                        "sku": "SMALL_GREEN_BARREL",
-                        "quantity": 1,
-                    }
-                ]
-            else:
-                print("Insufficient GOLD!")
-    else:
-        return -1 
+            if barrel.sku == "SMALL_GREEN_BARREL":  # maybe this will fix PDT - PURCHASE_BARRELS
+                if gold >= barrel.price:
+                    return [
+                        {
+                            "sku": "SMALL_GREEN_BARREL",
+                            "quantity": 1,
+                        }
+                    ]
+                else:
+                    print("Insufficient GOLD!")
+
+    return [] 
     
     '''
     with db.engine.begin() as connection:

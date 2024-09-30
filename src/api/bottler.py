@@ -51,7 +51,11 @@ def get_bottle_plan():
     with db.engine.begin() as connection:
          curr_green = connection.execute(sqlalchemy.text("SELECT num_green_ml FROM global_inventory")).first()[0]
 
-    Green_amount = int(curr_green / 100)
+    Green_amount = curr_green // 100
+
+    # maybe to fix PDT - MIX_POTIONS error?? or APIspec may want an integer?
+    if Green_amount == 0:
+        return []
 
     return [
             {
