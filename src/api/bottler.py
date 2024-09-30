@@ -28,7 +28,10 @@ def post_deliver_bottles(potions_delivered: list[PotionInventory], order_id: int
 
     for potion in potions_delivered:
         num_green_potions += potion.quantity
-        num_green_ml -= (100 * potion.quantity )
+        if num_green_ml >= 100:
+            num_green_ml -= (100 * potion.quantity )
+        else:
+            return "not enough ml to make potion"
     
     with db.engine.begin() as connection:
         result = connection.execute(sqlalchemy.text(f"UPDATE global_inventory SET num_green_potions = {num_green_potions}, num_green_ml = {num_green_ml}"))
@@ -52,8 +55,18 @@ def get_bottle_plan():
          curr_green = connection.execute(sqlalchemy.text("SELECT num_green_ml FROM global_inventory")).first()[0]
 
     Green_amount = curr_green // 100
-
+    
     # maybe to fix PDT - MIX_POTIONS error?? or APIspec may want an integer?
+    if Green_amount > 0:
+        return [
+            {
+                "potion_type": [0, 100, 0, 0],
+                "quantity": Green_amount,
+            }
+        ]
+    
+    return []
+    '''
     if Green_amount == 0:
         return []
 
@@ -63,6 +76,6 @@ def get_bottle_plan():
                 "quantity": Green_amount,
             }
         ]
-
+    '''
 if __name__ == "__main__":
     print(get_bottle_plan())
