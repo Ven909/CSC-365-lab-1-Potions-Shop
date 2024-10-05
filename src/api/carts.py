@@ -92,12 +92,18 @@ def post_visits(visit_id: int, customers: list[Customer]):
 @router.post("/")
 def create_cart(new_cart: Customer):
     """ """
+    global cart_id
+    cart_id += 1
+    cart_table[cart_id] = {}
+    '''
+    # V1 green potion code
     global cart_id 
     global cart_table
 
     cart_id += 1
     cart_table[cart_id] = {}
-
+    '''
+    
     return {"cart_id": cart_id}
 
 
@@ -108,12 +114,18 @@ class CartItem(BaseModel):
 @router.post("/{cart_id}/items/{item_sku}")
 def set_item_quantity(cart_id: int, item_sku: str, cart_item: CartItem):
     """ """
-    
+    if cart_id not in cart_table:
+        cart_table[cart_id] = {}
+        
+    using_cart = cart_table[cart_id]
+    using_cart[item_sku] = cart_item.quantity
+    '''
+    # V1 green potion code
     if (cart_id not in cart_table):
         cart_table[cart_id] = {}
     using_cart = cart_table[cart_id]
     using_cart[item_sku] = cart_item.quantity
-    
+    '''
     return "OK"
 
 class CartCheckout(BaseModel):
@@ -122,7 +134,64 @@ class CartCheckout(BaseModel):
 @router.post("/{cart_id}/checkout")
 def checkout(cart_id: int, cart_checkout: CartCheckout):
     """ """
-    # green potion cart checkout
+    using_cart = cart_table[cart_id]
+
+    # stats for the specific transaction:
+    bought_pots = 0
+    transaction_gold = 0
+
+    with db.engine.begin() as connection:
+        for sku, quantity in using_cart.items():
+            result = connection.execute(sqlalchemy.text("SELECT * FROM global_inventory")).first()
+
+            green_pots = result.num_green_potions
+            red_pots = result.num_red_potions
+            blue_pots = result.num_blue_potions
+            gold = result.gold
+        
+    if "green" in sku.lower():
+        print("Customer buys green")
+        if green_pots >= quantity:
+            green_pots -= quantity
+            bought_pots += quantity
+            transaction_gold += quantity * 50
+        else:
+            bought_pots += green_pots
+            transaction_gold += green_pots * 50
+            green_pots = 0
+    
+    if "red" in sku.lower():
+        print("Customer buys red")
+        if red_pots >= quantity:
+            red_pots -= quantity
+            bought_pots += quantity
+            transaction_gold += quantity * 50
+        else:
+            bought_pots += red_pots
+            transaction_gold += red_pots * 50
+            red_pots = 0
+
+    if "blue" in sku.lower():
+        print("Customer buys blue")
+        if blue_pots >= quantity:
+            blue_pots -= quantity
+            bought_pots += quantity
+            transaction_gold += quantity * 50
+        else:
+            bought_pots += blue_pots
+            transaction_gold += blue_pots * 50
+            blue_pots = 0
+    
+    gold += transaction_gold
+
+    with db.engine.begin() as connection:
+        connection.execute(sqlalchemy.text("UPDATE global_inventory SET num_green_potions = :green_potions, num_red_potions = :red_potions, num_blue_potions = :blue_potions, gold = :gold"), 
+                           { "green_potions": green_pots, "red_potions": red_pots, "blue_potions": blue_pots, "gold": gold})
+    
+    return {"total_potions_bought": bought_pots, "total_gold_paid": transaction_gold}
+
+    '''
+    # V1: green potion cart checkout
     with db.engine.begin() as connection: 
         sql_to_execute = \
             """SELECT * 
@@ -152,7 +221,7 @@ def checkout(cart_id: int, cart_checkout: CartCheckout):
         result = connection.execute(sqlalchemy.text(sql_to_execute))
         data = result.fetchall() 
         print("Checkout Result: ", data) 
-
+    '''
     '''
     using_cart = cart_table[cart_id]
 
@@ -179,5 +248,4 @@ def checkout(cart_id: int, cart_checkout: CartCheckout):
     connection.execute(sqlalchemy.text("UPDATE global_inventory SET num_green_potions = :curr_grn_potions"))
     '''
 
-    return {"total_potions_bought": 1, "total_gold_paid": 50}
     
