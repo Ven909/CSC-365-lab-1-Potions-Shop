@@ -56,6 +56,7 @@ def post_deliver_barrels(barrels_delivered: list[Barrel], order_id: int):
 
     # deduct gold
     updated_gold = current_gold - barrel_cost
+    
     updated_num_green_ml = green_amt + added_green
     updated_num_red_ml = red_amt + added_red
     updated_num_blue_ml = blue_amt + added_blue
@@ -83,25 +84,29 @@ def get_wholesale_purchase_plan(wholesale_catalog: list[Barrel]):
         blue_potions = result.num_blue_potions
         
         gold = result.gold
-
+    
+    # THIS works with small green barrel but ^^^ trying something new
     # extend the "Buy if less than 10 potions" plan to Red, Green & Blue
     if (green_potions < 10):
         for barrel in wholesale_catalog:
-            if "green" in barrel.sku.lower():
+            #if "green" in barrel.sku.lower():
+            if barrel.sku == "SMALL_GREEN_BARREL":
                 if gold >= barrel.price:
-                    barrel_plan.append({"sku": barrel.sku, "quantity": 1,})
+                    barrel_plan.append({"sku": "SMALL_GREEN_BARREL", "quantity": 1,})
                     gold -= barrel.price
     if (red_potions < 10):
         for barrel in wholesale_catalog:
-            if "red" in barrel.sku.lower():
+            #if "red" in barrel.sku.lower():
+            if barrel.sku == "SMALL_RED_BARREL":
                 if gold >= barrel.price:
-                    barrel_plan.append({"sku": barrel.sku, "quantity": 1,})
+                    barrel_plan.append({"sku": "SMALL_RED_BARREL", "quantity": 1,})
                     gold -= barrel.price                
     if (blue_potions < 10):
         for barrel in wholesale_catalog:
-            if "blue" in barrel.sku.lower():
+            #if "blue" in barrel.sku.lower():
+            if barrel.sku == "SMALL_BLUE_BARREL":
                 if gold >= barrel.price:
-                    barrel_plan.append({"sku": barrel.sku, "quantity": 1,})
+                    barrel_plan.append({"sku": "SMALL_BLUE_BARREL", "quantity": 1,})
                     gold -= barrel.price
 
     return barrel_plan

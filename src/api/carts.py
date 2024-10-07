@@ -116,7 +116,7 @@ def set_item_quantity(cart_id: int, item_sku: str, cart_item: CartItem):
     """ """
     if cart_id not in cart_table:
         cart_table[cart_id] = {}
-        
+
     using_cart = cart_table[cart_id]
     using_cart[item_sku] = cart_item.quantity
     '''
@@ -134,11 +134,19 @@ class CartCheckout(BaseModel):
 @router.post("/{cart_id}/checkout")
 def checkout(cart_id: int, cart_checkout: CartCheckout):
     """ """
+    if cart_id not in cart_table:
+        cart_table[cart_id] = {}
+
     using_cart = cart_table[cart_id]
 
     # stats for the specific transaction:
     bought_pots = 0
     transaction_gold = 0
+
+    green_pots = 0
+    red_pots = 0
+    blue_pots = 0
+    gold = 0
 
     with db.engine.begin() as connection:
         for sku, quantity in using_cart.items():
@@ -149,40 +157,40 @@ def checkout(cart_id: int, cart_checkout: CartCheckout):
             blue_pots = result.num_blue_potions
             gold = result.gold
         
-    if "green" in sku.lower():
-        print("Customer buys green")
-        if green_pots >= quantity:
-            green_pots -= quantity
-            bought_pots += quantity
-            transaction_gold += quantity * 50
-        else:
-            bought_pots += green_pots
-            transaction_gold += green_pots * 50
-            green_pots = 0
-    
-    if "red" in sku.lower():
-        print("Customer buys red")
-        if red_pots >= quantity:
-            red_pots -= quantity
-            bought_pots += quantity
-            transaction_gold += quantity * 50
-        else:
-            bought_pots += red_pots
-            transaction_gold += red_pots * 50
-            red_pots = 0
+            if "green" in sku.lower():
+                print("Customer buys green")
+                if green_pots >= quantity:
+                    green_pots -= quantity
+                    bought_pots += quantity
+                    transaction_gold += quantity * 50
+                else:
+                    bought_pots += green_pots
+                    transaction_gold += green_pots * 50
+                    green_pots = 0
+            
+            if "red" in sku.lower():
+                print("Customer buys red")
+                if red_pots >= quantity:
+                    red_pots -= quantity
+                    bought_pots += quantity
+                    transaction_gold += quantity * 50
+                else:
+                    bought_pots += red_pots
+                    transaction_gold += red_pots * 50
+                    red_pots = 0
 
-    if "blue" in sku.lower():
-        print("Customer buys blue")
-        if blue_pots >= quantity:
-            blue_pots -= quantity
-            bought_pots += quantity
-            transaction_gold += quantity * 50
-        else:
-            bought_pots += blue_pots
-            transaction_gold += blue_pots * 50
-            blue_pots = 0
-    
-    gold += transaction_gold
+            if "blue" in sku.lower():
+                print("Customer buys blue")
+                if blue_pots >= quantity:
+                    blue_pots -= quantity
+                    bought_pots += quantity
+                    transaction_gold += quantity * 50
+                else:
+                    bought_pots += blue_pots
+                    transaction_gold += blue_pots * 50
+                    blue_pots = 0
+            
+            gold += transaction_gold
 
     with db.engine.begin() as connection:
         connection.execute(sqlalchemy.text("UPDATE global_inventory SET num_green_potions = :green_potions, num_red_potions = :red_potions, num_blue_potions = :blue_potions, gold = :gold"), 

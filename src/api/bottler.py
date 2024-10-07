@@ -21,8 +21,19 @@ def post_deliver_bottles(potions_delivered: list[PotionInventory], order_id: int
     """ """
     print(f"potions delievered: {potions_delivered} order_id: {order_id}")
 
+    green_amt = 0
+    green_potions = 0
+    red_amt = 0
+    red_potions = 0
+    blue_amt = 0
+    blue_potions = 0
+
+    max_green_potions = 0
+    max_red_potions = 0
+    max_blue_potions = 0
+
     with db.engine.begin() as connection:
-        result = connection.execute(sqlalchemy.text("SELECT * FROM global_inventory")).first()
+        result = connection.execute(sqlalchemy.text("SELECT * FROM global_inventory")).fetchone()
 
         green_amt = result.num_green_ml
         green_potions = result.num_green_potions
@@ -38,21 +49,28 @@ def post_deliver_bottles(potions_delivered: list[PotionInventory], order_id: int
 
     for potion in potions_delivered:
         #if potion.potion_type[0] != 0:
+        #while(max_red_potions > potion.quantity and potion.potion_type == [100,0,0,0]): 
         if red_amt >= 100 and potion.potion_type == [100,0,0,0]:
-            red_amt -= 100 * potion.quantity 
+            red_amt -= (100 * potion.quantity) 
             red_potions += potion.quantity
         #if potion.potion_type[1] != 0:
+        #elif potion.quantity <= max_green_potions and potion.potion_type == [0,100,0,0]:
+        #while(max_green_potions > potion.quantity and potion.potion_type == [100,0,0,0]): 
         elif green_amt >= 100 and potion.potion_type == [0,100,0,0]:
-            green_amt -= 100 * potion.quantity 
+            green_amt -= (100 * potion.quantity) 
             green_potions += potion.quantity
         #if potion.potion_type[2] != 0:
+        #elif potion.quantity <= max_blue_potions and potion.potion_type == [0,0,100,0]:
+        #while(max_blue_potions > potion.quantity and potion.potion_type == [100,0,0,0]): 
         elif blue_amt >= 100 and potion.potion_type == [0,0,100,0]:
-            blue_amt -= 100 * potion.quantity 
+            blue_amt -= (100 * potion.quantity )
             blue_potions += potion.quantity
+        else:
+            return "not enough ml to make potion"
 
     with db.engine.begin() as connection:
-        connection.execute(sqlalchemy.text("UPDATE global_inventory SET num_green_ml = :green_ml, num_green_potions = :green_potions, num_red_ml =  :red_ml, num_red_potions = :red_potions, num_blue_ml = :blue_ml, num_blue_potions = :blue_potions"), 
-                           { "green_ml" : green_amt, "green_potions": green_potions, "red_ml" : red_amt, "red_potions": red_potions, "blue_ml" : blue_amt, "blue_potions": blue_potions,})
+        connection.execute(sqlalchemy.text(f"UPDATE global_inventory SET num_green_ml = {green_amt}, num_green_potions = {green_potions}, num_red_ml = {red_amt}, num_red_potions = {red_potions}, num_blue_ml = {blue_amt}, num_blue_potions = {blue_potions}")) 
+                           #,{ "green_ml" : green_amt, "green_potions": green_potions, "red_ml" : red_amt, "red_potions": red_potions, "blue_ml" : blue_amt, "blue_potions": blue_potions,})
     
     print(f"Updated Inventory: (green: {green_amt}ml) (red: {red_amt}ml) (blue: {blue_amt} ml)")
     print(f"Updated Inventory: (green: {green_potions} potions) (red: {red_potions} potions) (blue: {blue_potions} potions)")
