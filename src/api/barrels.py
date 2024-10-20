@@ -42,6 +42,7 @@ def post_deliver_barrels(barrels_delivered: list[Barrel], order_id: int):
 
         barrel_cost += barrel.quantity * barrel.price
 
+        # TODO: maybe this part is what's preventing bottler
         if current_gold >= barrel.price:
             if (barrel.potion_type == [1, 0, 0, 0]): # Red
                 added_red += barrel.quantity * barrel.ml_per_barrel

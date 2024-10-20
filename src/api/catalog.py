@@ -26,7 +26,7 @@ def get_catalog():
                         "sku": potion.sku,
                         "name": potion.name,
                         "quantity": potion.quantity,
-                        "price": potion.price,
+                        "price": potion.price, # TODO: set the price in supabase to 50?
                         "potion_type": [potion.red, potion.green, potion.blue, potion.dark]
                     }
                 )
