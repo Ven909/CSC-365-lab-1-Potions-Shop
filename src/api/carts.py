@@ -13,8 +13,11 @@ router = APIRouter(
 )
 
 # make a global cart ID variable for ease
+'''
+V2 code
 cart_id = 0
 cart_table = {} 
+'''
 
 class search_sort_options(str, Enum):
     customer_name = "customer_name"
@@ -89,12 +92,22 @@ def post_visits(visit_id: int, customers: list[Customer]):
     return "OK"
 
 
+
 @router.post("/")
 def create_cart(new_cart: Customer):
     """ """
+    cart_sql = """INSERT INTO carts (customer_name) VALUES (:name) RETURNING cart_id"""
+    with db.engine.begin() as connection:
+        cart_id = connection.execute(sqlalchemy.text(cart_sql), [{"name": new_cart.customer}]).scalar_one()
+    
+    print(f"New Cart_ID added: {cart_id}")
+    '''
+    V2 code
     global cart_id
     cart_id += 1
     cart_table[cart_id] = {}
+    '''
+
     '''
     # V1 green potion code
     global cart_id 
@@ -110,15 +123,34 @@ def create_cart(new_cart: Customer):
 class CartItem(BaseModel):
     quantity: int
 
+@router.get("/{cart_id}")
+def get_cart(cart_id: int):
+    """ """
+    return {}
 
 @router.post("/{cart_id}/items/{item_sku}")
 def set_item_quantity(cart_id: int, item_sku: str, cart_item: CartItem):
     """ """
+    print("Setting Item Quantity:")
+
+    with db.engine.begin() as connection:
+        result = """INSERT INTO cart_items (cart_id, potion_id, quantity, sku)
+                    SELECT :cart_id, potion_catalog.id, :quantity, :item_sku
+                    FROM potion_catalog WHERE potion_catalog.sku = :item_sku"""
+        
+        connection.execute(sqlalchemy.text(result), 
+                           [{"cart_id": cart_id, "quantity": cart_item.quantity, "item_sku": item_sku}])
+
+    print(f"Added {cart_item.quantity} {item_sku} in Cart {cart_id}")
+    '''
+    V2 code
     if cart_id not in cart_table:
         cart_table[cart_id] = {}
 
     using_cart = cart_table[cart_id]
     using_cart[item_sku] = cart_item.quantity
+    '''
+
     '''
     # V1 green potion code
     if (cart_id not in cart_table):
@@ -134,6 +166,36 @@ class CartCheckout(BaseModel):
 @router.post("/{cart_id}/checkout")
 def checkout(cart_id: int, cart_checkout: CartCheckout):
     """ """
+    transaction_gold = 0
+
+    print(f"Starting Checkout for Cart {cart_id}:")
+
+    with db.engine.begin() as connection:
+        #go into the cart_items and filter out all the items that are from the current cart
+        cart_stuff = connection.execute(sqlalchemy.text("""SELECT * FROM cart_items WHERE cart_id = :cart_id"""), [{"cart_id": cart_id}]).all()
+
+        for item in cart_stuff:
+            potion_result = connection.execute(sqlalchemy.text("""SELECT quantity, price FROM potion_catalog WHERE id = :potion_id"""), [{"potion_id": item.potion_id}]).one()
+
+            if item.quantity > potion_result.quantity:
+                connection.execute(sqlalchemy.text("""UPDATE cart_items SET quantity = :inventory_quant WHERE cart_id = :cart_id and potion_id = :potion_id"""), 
+                                                    [{"cart_id": cart_id, "potion_id": item.potion_id}])
+                
+            connection.execute(sqlalchemy.text("""UPDATE potion_catalog SET quantity = quantity - :bought_pots WHERE id = :potion_id """), 
+                                                    [{"potion_id": item.potion_id, "bought_pots": item.quantity}])
+
+            transaction_gold = potion_result.price * item.quantity
+            connection.execute(sqlalchemy.text("""UPDATE global_inventory SET gold = gold + :transaction_gold"""), [{"transaction_gold": transaction_gold}])
+
+            connection.execute(sqlalchemy.text("""UPDATE cart_items SET checkout_completed = true WHERE cart_id = :cart_id and potion_id = :potion_id"""), 
+                                                    [{"potion_id": item.potion_id, "cart_id": cart_id}])
+            
+            print(f"Cart {cart_id} bought {item.quantity} {item.sku} for {transaction_gold}")
+    
+    print(f"Checkout for Cart {cart_id} is complete.")
+    return "OK"
+    '''
+    V2 code
     if cart_id not in cart_table:
         cart_table[cart_id] = {}
 
@@ -197,7 +259,7 @@ def checkout(cart_id: int, cart_checkout: CartCheckout):
                            { "green_potions": green_pots, "red_potions": red_pots, "blue_potions": blue_pots, "gold": gold})
     
     return {"total_potions_bought": bought_pots, "total_gold_paid": transaction_gold}
-
+    '''
     '''
     # V1: green potion cart checkout
     with db.engine.begin() as connection: 

@@ -16,10 +16,24 @@ def get_catalog():
     catalog = []
 
     # change num_green_potions to *
-    '''
     with db.engine.begin() as connection:
-        result = connection.execute(sqlalchemy.text("SELECT num_green_potions FROM global_inventory"))
+        results = connection.execute(sqlalchemy.text("SELECT * FROM potion_catalog")).all()
+        
+        for potion in results:
+            if potion.quantity > 0:
+                catalog.append(
+                    {
+                        "sku": potion.sku,
+                        "name": potion.name,
+                        "quantity": potion.quantity,
+                        "price": potion.price,
+                        "potion_type": [potion.red, potion.green, potion.blue, potion.dark]
+                    }
+                )
+    return catalog
+
     '''
+    V2 code
     with db.engine.begin() as connection:
         result = connection.execute(sqlalchemy.text("SELECT * FROM global_inventory")).first()
     
@@ -53,6 +67,7 @@ def get_catalog():
         })
     
     return catalog
+    '''
     '''
     # V1 green potion code
     # if 0 green potions, return []

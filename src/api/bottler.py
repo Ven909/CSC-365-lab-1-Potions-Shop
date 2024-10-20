@@ -21,17 +21,44 @@ def post_deliver_bottles(potions_delivered: list[PotionInventory], order_id: int
     """ """
     print(f"potions delievered: {potions_delivered} order_id: {order_id}")
 
-    green_amt = 0
+    green_ml = 0
     green_potions = 0
-    red_amt = 0
+    
+    red_ml = 0
     red_potions = 0
-    blue_amt = 0
+    
+    blue_ml = 0
     blue_potions = 0
+    
+    dark_ml = 0
+    dark_potions = 0
 
-    max_green_potions = 0
-    max_red_potions = 0
-    max_blue_potions = 0
+    with db.engine.begin() as connection:
+        for potion in potions_delivered:
+            red_potions = potion.potion_type[0]
+            green_potions = potion.potion_type[1]
+            blue_potions = potion.potion_type[2]
+            dark_potions = potion.potion_type[3]
 
+            red_ml += (red_potions * potion.quantity)
+            green_ml += (green_potions * potion.quantity)
+            blue_ml += (blue_potions * potion.quantity)
+            dark_ml += (dark_potions * potion.quantity)
+
+            update_pots = """UPDATE potion_catalog SET quantity = quantity + :amt
+                        WHERE red = :red_potions and green = :green_potions and blue = :blue_potions and dark = :dark_potions"""
+            connection.execute(sqlalchemy.text(update_pots), 
+                    [{"amt": potion.quantity, "red_potions": red_potions, "green_potions": green_potions, "blue_potions": blue_potions, "dark_potions": dark_potions}])
+            
+            update_global = """UPDATE global_inventory
+                            SET num_red_ml = num_red_ml - :red_ml,
+                            num_green_ml = num_green_ml - :green_ml,
+                            num_blue_ml = num_blue_ml - :blue_ml,
+                            num_dark_ml = num_dark_ml - :dark_ml"""
+            connection.execute(sqlalchemy.text(update_global), 
+                [{"red_ml": red_ml, "green_ml": green_ml, "blue_ml": blue_ml, "dark_ml": dark_ml}])
+    '''
+    V2 code
     with db.engine.begin() as connection:
         result = connection.execute(sqlalchemy.text("SELECT * FROM global_inventory")).fetchone()
 
@@ -74,7 +101,7 @@ def post_deliver_bottles(potions_delivered: list[PotionInventory], order_id: int
     
     print(f"Updated Inventory: (green: {green_amt}ml) (red: {red_amt}ml) (blue: {blue_amt} ml)")
     print(f"Updated Inventory: (green: {green_potions} potions) (red: {red_potions} potions) (blue: {blue_potions} potions)")
-
+    '''
     '''
     # V1 green potion code 
     with db.engine.begin() as connection:
@@ -101,6 +128,7 @@ def get_bottle_plan():
     """
     Go from barrel to bottle.
     """
+    print("Bottle plan: ")
 
     # Each bottle has a quantity of what proportion of red, blue, and
     # green potion to add.
@@ -108,6 +136,61 @@ def get_bottle_plan():
 
     # Initial logic: bottle all barrels into green potions.
 
+    bottle_plan = []
+
+    with db.engine.begin() as connection:
+        global_res = connection.execute(sqlalchemy.text("SELECT * FROM global_inventory")).one()
+        
+        print(f"Current Global inventory: {global_res}")
+
+        red_ml = global_res.num_red_ml
+        green_ml = global_res.num_green_ml
+        blue_ml = global_res.num_blue_ml 
+        dark_ml = global_res.num_dark_ml
+
+        catalog_res = connection.execute(sqlalchemy.text("SELECT sku, quantity, red, green, blue, dark FROM potion_catalog ORDER BY quantity ASC")).all()
+        print(f"Current potion catalog: {catalog_res}")
+
+        for potion in catalog_res:
+            if (potion.red > red_ml) or (potion.green > green_ml) or (potion.blue > blue_ml) or (potion.dark > dark_ml):
+                print(f"Not enough inventory to even make 1 {potion.sku}")
+                continue
+
+            max_available = []
+            if (potion.red > 0):
+                max_available.append(red_ml // potion.red)
+            if(potion.green > 0):
+                max_available.append(green_ml // potion.green)
+            if(potion.blue > 0):
+                max_available.append(blue_ml // potion.blue)
+            if(potion.dark > 0):
+                max_available.append(dark_ml // potion.dark)
+
+            max_pots = 138 - potion.quantity
+            max_available.append(max_pots)
+            available_request = min(max_available)
+
+            if available_request > 0:
+                if potion.red > 0:
+                    red_ml -= available_request * potion.red
+                if potion.green > 0:
+                    green_ml -= available_request * potion.green
+                if potion.blue > 0:
+                    blue_ml -= available_request * potion.blue
+                if potion.dark > 0:
+                    dark_ml -= available_request * potion.dark
+                bottle_plan.append(
+                    {
+                        "potion_type": [potion.red, potion.green, potion.blue, potion.dark],
+                        "quantity": available_request
+                    })
+            print(f"Making {available_request} {potion.sku}")
+
+    return bottle_plan
+        
+
+    '''
+    V2 code
     bottle_plan = []
 
     with db.engine.begin() as connection:
@@ -136,7 +219,7 @@ def get_bottle_plan():
                 "quantity": blue_amt, 
             })
     return bottle_plan
-
+    '''
     '''
     # V1 green potion code 
     with db.engine.begin() as connection:
