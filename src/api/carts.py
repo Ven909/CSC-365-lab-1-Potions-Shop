@@ -82,6 +82,9 @@ class Customer(BaseModel):
     character_class: str
     level: int
 
+class NewCart(BaseModel):
+    customer: str
+
 @router.post("/visits/{visit_id}")
 def post_visits(visit_id: int, customers: list[Customer]):
     """
@@ -94,7 +97,7 @@ def post_visits(visit_id: int, customers: list[Customer]):
 
 
 @router.post("/")
-def create_cart(new_cart: Customer):
+def create_cart(new_cart: NewCart):
     """ """
     cart_sql = """INSERT INTO carts (customer_name) VALUES (:name) RETURNING cart_id"""
     with db.engine.begin() as connection:
