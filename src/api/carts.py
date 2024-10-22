@@ -99,6 +99,10 @@ def post_visits(visit_id: int, customers: list[Customer]):
 @router.post("/")
 def create_cart(new_cart: NewCart):
     """ """
+    '''
+    Error creating new cart with code: Returned HTTP Code 422 
+    {"message":["['body', 'customer']: field required
+    '''
     cart_sql = """INSERT INTO carts (customer_name) VALUES (:name) RETURNING cart_id"""
     with db.engine.begin() as connection:
         cart_id = connection.execute(sqlalchemy.text(cart_sql), [{"name": new_cart.customer}]).scalar_one()
