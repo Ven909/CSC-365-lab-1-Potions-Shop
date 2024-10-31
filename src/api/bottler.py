@@ -157,6 +157,8 @@ def get_bottle_plan():
         available_blue = blue
         available_dark = dark
 
+        bottle_quantity = 0
+
         for potion in potion_sql:
             curr_potions = connection.execute(sqlalchemy.text(
                 "SELECT SUM(inventory_change) AS inventory from potion_ledger WHERE potion_id = :potion_id"),

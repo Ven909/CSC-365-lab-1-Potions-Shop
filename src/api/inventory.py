@@ -14,8 +14,6 @@ router = APIRouter(
 @router.get("/audit")
 def get_inventory():
     """ """
-    print(f"Before = Total Potions: {total_potions} Total ML: {total_ml} Total Gold: {curr_gold}")
-
     total_potions = 0
 
     with db.engine.begin() as connection:
