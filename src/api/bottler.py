@@ -176,9 +176,12 @@ def get_bottle_plan():
                         available_green -= potion.green_ml * bottle_quantity
                         available_blue -= potion.blue_ml * bottle_quantity
                         available_dark -= potion.dark_ml * bottle_quantity
+            
+            print(f"Making {bottle_quantity} {potion.item_sku}")
 
     return bottle_plan
-        
+
+# TODO: maybe revisit this        
 def how_many_to_bottle(potion, available_red, available_green, available_blue, available_dark):    
     half_red = available_red / 2
     half_green = available_green / 2

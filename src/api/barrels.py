@@ -34,7 +34,7 @@ def post_deliver_barrels(barrels_delivered: list[Barrel], order_id: int):
         gold = 0
 
     for barrel_delivered in barrels_delivered:
-        print(f'Puchased {barrel_delivered.quantity} of {barrel_delivered.sku}({barrel_delivered.ml_per_barrel}ml)')
+        print(f'Purchased {barrel_delivered.quantity} of {barrel_delivered.sku}({barrel_delivered.ml_per_barrel}ml)')
 
         gold -= barrel_delivered.price * barrel_delivered.quantity
 
