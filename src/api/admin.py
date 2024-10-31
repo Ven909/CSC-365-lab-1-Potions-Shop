@@ -17,8 +17,21 @@ def reset():
     inventory, and all barrels are removed from inventory. Carts are all reset.
     """
     with db.engine.begin() as connection:
-        connection.execute(sqlalchemy.text("UPDATE global_inventory SET num_green_ml = 0, num_red_ml = 0, num_blue_ml = 0, num_dark_ml = 0, gold = 100"))
-        connection.execute(sqlalchemy.text("UPDATE potion_catalog SET quantity = 0"))
+        connection.execute(sqlalchemy.text("TRUNCATE TABLE global_ledger CASCADE"))
+        connection.execute(sqlalchemy.text("TRUNCATE TABLE cart_items CASCADE"))
+        connection.execute(sqlalchemy.text("TRUNCATE TABLE carts CASCADE"))
+        connection.execute(sqlalchemy.text("TRUNCATE TABLE potion_ledger CASCADE"))
+        
+        connection.execute(sqlalchemy.text(
+            """
+            INSERT INTO global_ledger (gold_difference, order_type, potion_capacity, ml_capacity) 
+            VALUES (:gold, :order_type, :potion_capacity, :ml_capacity)
+            """), 
+            [{"gold": 100,
+              "order_type": "Shop Reset",
+              "potion_capacity": 50,
+              "ml_capacity": 10000}])
+
 
     print("The shop has been Reset")
 

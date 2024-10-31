@@ -26,52 +26,47 @@ def post_deliver_barrels(barrels_delivered: list[Barrel], order_id: int):
     print(f"barrels delievered: {barrels_delivered} order_id: {order_id}")
 
     with db.engine.begin() as connection:
-       result = connection.execute(sqlalchemy.text("SELECT * FROM global_inventory"))
-       
-    row = result.fetchone()
-    current_gold = row.gold
+        
+        red_ml = 0
+        green_ml = 0
+        blue_ml = 0
+        dark_ml = 0
+        gold = 0
 
-    barrel_cost = 0
-    added_green = 0
-    added_red = 0
-    added_blue = 0
-    added_dark = 0
+    for barrel_delivered in barrels_delivered:
+        print(f'Puchased {barrel_delivered.quantity} of {barrel_delivered.sku}({barrel_delivered.ml_per_barrel}ml)')
 
-    for barrel in barrels_delivered:
-        print(f'Puchased {barrel.quantity} of {barrel.sku}({barrel.ml_per_barrel}ml)')
+        gold -= barrel_delivered.price * barrel_delivered.quantity
 
-        barrel_cost += barrel.quantity * barrel.price
-
-        # TODO: maybe this part is what's preventing bottler
-        if current_gold >= barrel.price:
-            if (barrel.potion_type == [1, 0, 0, 0]): # Red
-                added_red += barrel.quantity * barrel.ml_per_barrel
-                print(f'Adding {added_red}ml of red')
-            elif (barrel.potion_type == [0, 1, 0, 0]): # Green
-                added_green += barrel.quantity * barrel.ml_per_barrel
-                print(f'Adding {added_green}ml of green')
-            elif (barrel.potion_type == [0, 0, 1, 0]): # Blue
-                added_blue += barrel.quantity * barrel.ml_per_barrel
-                print(f'Adding {added_blue}ml of blue')
-            elif(barrel.potion_type == [0, 0, 0, 1]): # Dark
-                added_dark += barrel.quantity * barrel.ml_per_barrel
-                print(f'Adding {added_dark}ml of dark')
-            else:
-                raise Exception("Invalid Potion Type")
+        if barrel_delivered.potion_type == [1,0,0,0]:
+            red_ml += barrel_delivered.ml_per_barrel * barrel_delivered.quantity
+            print(f'Adding {red_ml}ml of red')
+        elif barrel_delivered.potion_type == [0,1,0,0]:
+            green_ml += barrel_delivered.ml_per_barrel * barrel_delivered.quantity
+            print(f'Adding {green_ml}ml of green')
+        elif barrel_delivered.potion_type == [0,0,1,0]:
+            blue_ml += barrel_delivered.ml_per_barrel * barrel_delivered.quantity
+            print(f'Adding {blue_ml}ml of blue')
+        elif barrel_delivered.potion_type == [0,0,0,1]:
+            dark_ml += barrel_delivered.ml_per_barrel * barrel_delivered.quantity
+            print(f'Adding {dark_ml}ml of dark')
         else:
-            return "not enough gold"    
-
-    # Updates
-    with db.engine.begin() as connection:
-        result = """UPDATE global_inventory
-                        SET num_red_ml = num_red_ml + :added_red,
-                        num_green_ml = num_green_ml + :added_green,
-                        num_blue_ml = num_blue_ml + :added_blue,
-                        num_dark_ml = num_dark_ml + :added_dark,
-                        gold = gold - :barrel_cost"""
-    
-        connection.execute(sqlalchemy.text(result), 
-            [{"added_red": added_red, "added_green": added_green, "added_blue": added_blue, "added_dark": added_dark, "barrel_cost": barrel_cost}])
+            raise Exception("Invalid potion type")
+            
+    connection.execute(
+        sqlalchemy.text(
+            """
+            INSERT INTO global_ledger
+            (gold_difference, red_difference, green_difference, blue_difference, dark_difference, order_id, order_type)
+            VALUES (:gold, :red_ml, :green_ml, :blue_ml, :dark_ml, :order_id, :order_type)
+            """), 
+        [{  "gold": gold,
+            "red_ml": red_ml, 
+            "green_ml": green_ml, 
+            "blue_ml": blue_ml, 
+            "dark_ml": dark_ml,
+            "order_id": order_id,
+            "order_type": "Barrels"}])
 
     """ 
     V2 code
@@ -126,48 +121,68 @@ def get_wholesale_purchase_plan(wholesale_catalog: list[Barrel]):
     
     barrel_plan = []
 
-    catalog_sorted = barrel_sort(wholesale_catalog)
+    barrel_temp = {
+        'red' : None,
+        'green' : None,
+        'blue' : None,
+        'dark' : None}
     
+    barrel_split = {
+        'large' : barrel_temp.copy(),
+        'medium' : barrel_temp.copy(),
+        'small' : barrel_temp.copy(),
+        'mini' : barrel_temp.copy()}
+    
+    ml_request = {
+        'red' : 0,
+        'green' : 0,
+        'blue' : 0,
+        'dark' : 0}
+    
+    type = list(ml_request.keys())
+
+    # figure out what barrels to buy
+    for barrel in wholesale_catalog:
+        
+        print(barrel, flush=True)
+        
+        if barrel.ml_per_barrel == 10000:
+            barrel_split['large'][type[barrel.potion_type.index(max(barrel.potion_type))]] = barrel
+        elif barrel.ml_per_barrel == 2500:
+            barrel_split['medium'][type[barrel.potion_type.index(max(barrel.potion_type))]] = barrel
+        elif barrel.ml_per_barrel == 500:
+            barrel_split['small'][type[barrel.potion_type.index(max(barrel.potion_type))]] = barrel
+        else:
+            barrel_split['mini'][type[barrel.potion_type.index(max(barrel.potion_type))]] = barrel
+    
+    curr_gold = 0
     with db.engine.begin() as connection:
-        result = connection.execute(sqlalchemy.text("""SELECT * FROM global_inventory""")).one()
-        
-        green_ml = result.num_green_ml
-        red_ml = result.num_red_ml
-        blue_ml = result.num_blue_ml
-        dark_ml = result.num_dark_ml
+        curr_gold = connection.execute(sqlalchemy.text("SELECT SUM(gold_difference) FROM global_ledger")).first()[0]
+        potion_type = connection.execute(sqlalchemy.text("SELECT potion_id, SUM(inventory_change) AS inventory FROM potion_ledger GROUP BY potion_id"))
 
-        curr_gold = result.gold
-    
-    print(f"Current Gold: {result.gold}")
+        for potion in potion_type:
+            if potion.inventory <= 1:
+                potion_sql = connection.execute(sqlalchemy.text("SELECT * from potions WHERE potion_id = :potion_id"),
+                                            [{"potion_id": potion.potion_id}]).first()
+                ml_request['red'] += potion_sql.red_ml
+                ml_request['green'] += potion_sql.green_ml
+                ml_request['blue'] += potion_sql.blue_ml
+                ml_request['dark'] += potion_sql.dark_ml
 
-    curr_red = ("red", [100, 0 , 0, 0], red_ml)
-    curr_green = ("green", [0, 100 , 0, 0], green_ml)
-    curr_blue = ("blue", [0, 0 , 100, 0], blue_ml)
-    curr_dark = ("dark", [0, 0 , 0, 100], dark_ml) 
-    
-    priority = [curr_red, curr_green, curr_blue, curr_dark]
+        ml_request = dict(sorted(ml_request.items(), key=lambda item: item[1]))
 
-    priority.sort(key = lambda list: list[2])
-
-    # Buying barrels
-    for i in range(len(priority)):
-        potion_color = priority[i][0]
-        potion_inventory = priority[i][2]
-        
-        if potion_color not in catalog_sorted:
-            print(f"There are no {potion_color} barrels for sale currently")
-            
-            continue
-
-        catalog_choice = catalog_sorted[potion_color]
-
-        curr_request, curr_gold = balance_plan(priority[i], catalog_choice, curr_gold)
-        
-        barrel_plan.extend(curr_request)
-        
-        print(f"Inventory Gold: {curr_gold}")
-
-    print(f'Requesting Barrels: \n{barrel_plan}')
+    for barrel_type in ml_request.keys():
+        for barrel_size in barrel_split.values():
+          
+            if barrel_size[barrel_type] is not None and (int(curr_gold / barrel_size[barrel_type].price) > 0):
+                barrel_plan.append(
+                    {
+                        "sku": barrel_size[barrel_type].sku,
+                        "quantity": 1,
+                    }
+                )
+                curr_gold -= barrel_size[barrel_type].price
+                break
     
     return barrel_plan
     '''
@@ -244,59 +259,3 @@ def get_wholesale_purchase_plan(wholesale_catalog: list[Barrel]):
     else:
         return -1 
     '''
-def balance_plan(curr_priority, catalog_choice, curr_gold):
-    requests = []
-    quantity = 0
-
-    wanted_ml = 0
-    curr_ml = curr_priority[2]
-    max_ml = 5000 - curr_ml
-    
-    for barrel in catalog_choice:
-        good_request = []
-        good_request.append(barrel.quantity) 
-        good_request.append(curr_gold // barrel.price) 
-        good_request.append(max_ml // barrel.ml_per_barrel) 
-        quantity = min(good_request) 
-
-        if quantity > 0: 
-            requests.append(
-                {
-                    "sku": barrel.sku,
-                    "quantity": quantity
-                })
-            curr_gold -= (quantity * barrel.price)
-            wanted_ml += quantity * barrel.ml_per_barrel
-            max_ml -= wanted_ml
-
-    return requests, curr_gold
-        
-
-def barrel_sort(wholesale_catalog: list[Barrel]):
-    catalog_sorted = {}
-    
-    for barrel in wholesale_catalog:
-        if (barrel.potion_type == [1, 0, 0, 0]):
-            if ("red" not in catalog_sorted):
-                catalog_sorted["red"] = [barrel]
-            else:
-                catalog_sorted["red"].append(barrel)
-        elif (barrel.potion_type == [0, 0, 1, 0]):
-            if ("blue" not in catalog_sorted):
-                catalog_sorted["blue"] = [barrel]
-            else:
-                catalog_sorted["blue"].append(barrel)
-        elif (barrel.potion_type == [0, 1, 0, 0]):
-            if ("green" not in catalog_sorted):
-                catalog_sorted["green"] = [barrel]
-            else:
-                catalog_sorted["green"].append(barrel)
-        elif (barrel.potion_type == [0, 0, 0, 1]):
-            if ("dark" not in catalog_sorted):
-                catalog_sorted["dark"] = [barrel]
-            else:
-                catalog_sorted["dark"].append(barrel)
-        else:
-            raise Exception("Invalid Potion Type")
-    
-    return catalog_sorted

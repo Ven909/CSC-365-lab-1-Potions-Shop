@@ -103,10 +103,10 @@ def create_cart(new_cart: Customer):
     Error creating new cart with code: Returned HTTP Code 422 
     {"message":["['body', 'customer']: field required
     '''
-    cart_sql = """INSERT INTO carts (customer_name) VALUES (:name) RETURNING cart_id"""
     with db.engine.begin() as connection:
-        cart_id = connection.execute(sqlalchemy.text(cart_sql), [{"name": new_cart.customer_name}]).scalar_one()
-    
+        cart_id = connection.execute(sqlalchemy.text("INSERT INTO carts (customer_name) VALUES (:customer_name) RETURNING cart_id"),
+            [{"customer_name": new_cart.customer_name}]).first()[0]
+
     print(f"New Cart_ID added: {cart_id}")
     '''
     V2 code
@@ -141,12 +141,13 @@ def set_item_quantity(cart_id: int, item_sku: str, cart_item: CartItem):
     print("Setting Item Quantity:")
 
     with db.engine.begin() as connection:
-        result = """INSERT INTO cart_items (cart_id, potion_id, quantity, sku)
-                    SELECT :cart_id, potion_catalog.id, :quantity, :item_sku
-                    FROM potion_catalog WHERE potion_catalog.sku = :item_sku"""
+        potion_id = connection.execute(sqlalchemy.text("SELECT potion_id FROM potions WHERE item_sku = :item_sku"),
+            [{"item_sku": item_sku}]).first()[0]
         
-        connection.execute(sqlalchemy.text(result), 
-                           [{"cart_id": cart_id, "quantity": cart_item.quantity, "item_sku": item_sku}])
+        connection.execute(sqlalchemy.text("INSERT INTO cart_items (cart_id, potion_id, quantity) VALUES (:cart_id, :potion_id, :quantity)"),
+            [{"cart_id": cart_id,
+              "potion_id": potion_id,
+              "quantity": cart_item.quantity}])
 
     print(f"Added {cart_item.quantity} {item_sku} in Cart {cart_id}")
     '''
@@ -173,34 +174,40 @@ class CartCheckout(BaseModel):
 @router.post("/{cart_id}/checkout")
 def checkout(cart_id: int, cart_checkout: CartCheckout):
     """ """
-    transaction_gold = 0
-
     print(f"Starting Checkout for Cart {cart_id}:")
 
+    gold_paid = 0
+    potions_bought = 0
+
     with db.engine.begin() as connection:
-        #go into the cart_items and filter out all the items that are from the current cart
-        cart_stuff = connection.execute(sqlalchemy.text("""SELECT * FROM cart_items WHERE cart_id = :cart_id"""), [{"cart_id": cart_id}]).all()
-
-        for item in cart_stuff:
-            potion_result = connection.execute(sqlalchemy.text("""SELECT quantity, price FROM potion_catalog WHERE id = :potion_id"""), [{"potion_id": item.potion_id}]).one()
-
-            if item.quantity > potion_result.quantity:
-                connection.execute(sqlalchemy.text("""UPDATE cart_items SET quantity = :inventory_quant WHERE cart_id = :cart_id and potion_id = :potion_id"""), 
-                                                    [{"cart_id": cart_id, "potion_id": item.potion_id}])
-                
-            connection.execute(sqlalchemy.text("""UPDATE potion_catalog SET quantity = quantity - :bought_pots WHERE id = :potion_id """), 
-                                                    [{"potion_id": item.potion_id, "bought_pots": item.quantity}])
-
-            transaction_gold = potion_result.price * item.quantity
-            connection.execute(sqlalchemy.text("""UPDATE global_inventory SET gold = gold + :transaction_gold"""), [{"transaction_gold": transaction_gold}])
-
-            connection.execute(sqlalchemy.text("""UPDATE cart_items SET checkout_completed = true WHERE cart_id = :cart_id and potion_id = :potion_id"""), 
-                                                    [{"potion_id": item.potion_id, "cart_id": cart_id}])
+        cart_sql = connection.execute(sqlalchemy.text("SELECT * FROM cart_items WHERE cart_id = :cart_id"), [{"cart_id": cart_id}])
+        
+        for item in cart_sql:
+            connection.execute(sqlalchemy.text(
+                """
+                INSERT INTO potion_ledger (potion_id, inventory_change, order_id, order_type) 
+                VALUES (:potion_id, :inventory_change, :order_id, :order_type)
+                """),
+                [{"potion_id": item.potion_id,
+                  "inventory_change": -item.quantity,
+                  "order_id": cart_id,
+                  "order_type": "checkout"}])
             
-            print(f"Cart {cart_id} bought {item.quantity} {item.sku} for {transaction_gold}")
+            potion_cost = connection.execute(sqlalchemy.text("SELECT price FROM potions WHERE potion_id = :potion_id"), 
+                                             [{"potion_id": item.potion_id}]).first()[0]
+            
+            gold_paid += (item.quantity * potion_cost)
+            potions_bought += item.quantity
+        
+        connection.execute(sqlalchemy.text(
+            "INSERT INTO global_ledger (gold_difference, order_id, order_type) VALUES (:total_cost, :order_id, :order_type)"), 
+            [{"total_cost": gold_paid,
+              "order_id": cart_id,
+              "order_type": "checkout"}])
     
-    print(f"Checkout for Cart {cart_id} is complete.")
-    return "OK"
+    print(f"Checkout for Cart {cart_id} is complete.")    
+    
+    return {"total_potions_bought": potions_bought, "total_gold_paid": gold_paid}  
     '''
     V2 code
     if cart_id not in cart_table:

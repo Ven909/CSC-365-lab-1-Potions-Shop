@@ -21,42 +21,49 @@ def post_deliver_bottles(potions_delivered: list[PotionInventory], order_id: int
     """ """
     print(f"potions delievered: {potions_delivered} order_id: {order_id}")
 
-    green_ml = 0
-    green_potions = 0
-    
     red_ml = 0
-    red_potions = 0
-    
+    green_ml = 0
     blue_ml = 0
-    blue_potions = 0
-    
     dark_ml = 0
-    dark_potions = 0
 
     with db.engine.begin() as connection:
         for potion in potions_delivered:
-            red_potions = potion.potion_type[0]
-            green_potions = potion.potion_type[1]
-            blue_potions = potion.potion_type[2]
-            dark_potions = potion.potion_type[3]
-
-            red_ml += (red_potions * potion.quantity)
-            green_ml += (green_potions * potion.quantity)
-            blue_ml += (blue_potions * potion.quantity)
-            dark_ml += (dark_potions * potion.quantity)
-
-            update_pots = """UPDATE potion_catalog SET quantity = quantity + :amt
-                        WHERE red = :red_potions and green = :green_potions and blue = :blue_potions and dark = :dark_potions"""
-            connection.execute(sqlalchemy.text(update_pots), 
-                    [{"amt": potion.quantity, "red_potions": red_potions, "green_potions": green_potions, "blue_potions": blue_potions, "dark_potions": dark_potions}])
-            
-            update_global = """UPDATE global_inventory
-                            SET num_red_ml = num_red_ml - :red_ml,
-                            num_green_ml = num_green_ml - :green_ml,
-                            num_blue_ml = num_blue_ml - :blue_ml,
-                            num_dark_ml = num_dark_ml - :dark_ml"""
-            connection.execute(sqlalchemy.text(update_global), 
-                [{"red_ml": red_ml, "green_ml": green_ml, "blue_ml": blue_ml, "dark_ml": dark_ml}])
+            red_ml -= potion.potion_type[0] * potion.quantity
+            green_ml -= potion.potion_type[1] * potion.quantity
+            blue_ml -= potion.potion_type[2] * potion.quantity
+            dark_ml -= potion.potion_type[3] * potion.quantity
+            potion_id = connection.execute(sqlalchemy.text(""" SELECT * FROM potions 
+                WHERE red_ml = :red_ml and green_ml = :green_ml and blue_ml = :blue_ml and dark_ml = :dark_ml
+                """),
+                [{"red_ml": potion.potion_type[0], 
+                  "green_ml": potion.potion_type[1],
+                  "blue_ml": potion.potion_type[2], 
+                  "dark_ml": potion.potion_type[3]}]).first().potion_id
+            connection.execute(sqlalchemy.text(
+                    """
+                    INSERT INTO potion_ledger
+                    (potion_id, inventory_change, order_id, order_type)
+                    VALUES (:potion_id, :inventory_change, :order_id, :order_type)
+                    """), 
+                [{  "potion_id": potion_id,
+                    "inventory_change": potion.quantity, 
+                    "order_id": order_id, 
+                    "order_type": "bottling"}])
+        
+        connection.execute(
+            sqlalchemy.text(
+                """
+                INSERT INTO global_ledger
+                (gold_difference, red_difference, green_difference, blue_difference, dark_difference, order_id, order_type)
+                VALUES (:gold, :red_ml, :green_ml, :blue_ml, :dark_ml, :order_id, :order_type)
+                """), 
+            [{  "gold": 0,
+                "red_ml": red_ml, 
+                "green_ml": green_ml, 
+                "blue_ml": blue_ml, 
+                "dark_ml": dark_ml,
+                "order_id": order_id,
+                "order_type": "Bottling Potions"}])
     '''
     V2 code
     with db.engine.begin() as connection:
@@ -139,55 +146,53 @@ def get_bottle_plan():
     bottle_plan = []
 
     with db.engine.begin() as connection:
-        global_res = connection.execute(sqlalchemy.text("SELECT * FROM global_inventory")).one()
-        
-        print(f"Current Global inventory: {global_res}")
+        red = connection.execute(sqlalchemy.text("SELECT SUM(red_difference) FROM global_ledger")).first()[0]
+        green = connection.execute(sqlalchemy.text("SELECT SUM(green_difference) FROM global_ledger")).first()[0]
+        blue = connection.execute(sqlalchemy.text("SELECT SUM(blue_difference) FROM global_ledger")).first()[0]
+        dark = connection.execute(sqlalchemy.text("SELECT SUM(dark_difference) FROM global_ledger")).first()[0]
+        potion_sql = connection.execute(sqlalchemy.text("SELECT * from potions"))
 
-        red_ml = global_res.num_red_ml
-        green_ml = global_res.num_green_ml
-        blue_ml = global_res.num_blue_ml 
-        dark_ml = global_res.num_dark_ml
+        available_red = red
+        available_green = green
+        available_blue = blue
+        available_dark = dark
 
-        catalog_res = connection.execute(sqlalchemy.text("SELECT sku, quantity, red, green, blue, dark FROM potion_catalog ORDER BY quantity ASC")).all()
-        print(f"Current potion catalog: {catalog_res}")
-
-        for potion in catalog_res:
-            if (potion.red > red_ml) or (potion.green > green_ml) or (potion.blue > blue_ml) or (potion.dark > dark_ml):
-                print(f"Not enough inventory to even make 1 {potion.sku}")
-                continue
-
-            max_available = []
-            if (potion.red > 0):
-                max_available.append(red_ml // potion.red)
-            if(potion.green > 0):
-                max_available.append(green_ml // potion.green)
-            if(potion.blue > 0):
-                max_available.append(blue_ml // potion.blue)
-            if(potion.dark > 0):
-                max_available.append(dark_ml // potion.dark)
-
-            max_pots = 138 - potion.quantity
-            max_available.append(max_pots)
-            available_request = min(max_available)
-
-            if available_request > 0:
-                if potion.red > 0:
-                    red_ml -= available_request * potion.red
-                if potion.green > 0:
-                    green_ml -= available_request * potion.green
-                if potion.blue > 0:
-                    blue_ml -= available_request * potion.blue
-                if potion.dark > 0:
-                    dark_ml -= available_request * potion.dark
-                bottle_plan.append(
-                    {
-                        "potion_type": [potion.red, potion.green, potion.blue, potion.dark],
-                        "quantity": available_request
-                    })
-            print(f"Making {available_request} {potion.sku}")
+        for potion in potion_sql:
+            curr_potions = connection.execute(sqlalchemy.text(
+                "SELECT SUM(inventory_change) AS inventory from potion_ledger WHERE potion_id = :potion_id"),
+                [{"potion_id": potion.potion_id}]).first()
+            
+            if curr_potions.inventory is None or curr_potions.inventory <= 1:
+                if potion.red_ml <= available_red and potion.green_ml <= available_green \
+                and potion.blue_ml <= available_blue and potion.dark_ml <= available_dark:
+                    
+                    bottle_quantity = how_many_to_bottle(potion, available_red, available_green, available_blue, available_dark)
+                    if bottle_quantity > 0:
+                        bottle_plan.append({
+                            "potion_type": [potion.red_ml, potion.green_ml, potion.blue_ml, potion.dark_ml],
+                            "quantity": bottle_quantity,
+                        })
+                        available_red -= potion.red_ml * bottle_quantity
+                        available_green -= potion.green_ml * bottle_quantity
+                        available_blue -= potion.blue_ml * bottle_quantity
+                        available_dark -= potion.dark_ml * bottle_quantity
 
     return bottle_plan
         
+def how_many_to_bottle(potion, available_red, available_green, available_blue, available_dark):    
+    half_red = available_red / 2
+    half_green = available_green / 2
+    half_blue = available_blue / 2
+    half_dark = available_dark / 2
+    
+    # Calculate max bottles for each ingredient, or infinity if ingredient is not needed
+    red_made = half_red // potion.red_ml if potion.red_ml > 0 else float('inf')
+    green_made = half_green // potion.green_ml if potion.green_ml > 0 else float('inf')
+    blue_made = half_blue // potion.blue_ml if potion.blue_ml > 0 else float('inf')
+    dark_made = half_dark // potion.dark_ml if potion.dark_ml > 0 else float('inf')
+    
+    # Return the minimum number of bottles possible based on limiting ingredient
+    return int(min(red_made, green_made, blue_made, dark_made))
 
     '''
     V2 code

@@ -15,21 +15,21 @@ def get_catalog():
     # an empty array for your catalog (rather than a potion with the quantity as 0)
     catalog = []
 
-    # change num_green_potions to *
     with db.engine.begin() as connection:
-        results = connection.execute(sqlalchemy.text("SELECT * FROM potion_catalog")).all()
+        results = connection.execute(sqlalchemy.text("SELECT potion_id, SUM(inventory_change) AS inventory FROM potion_ledger GROUP BY potion_id"))
         
         for potion in results:
-            if potion.quantity > 0:
-                catalog.append(
-                    {
-                        "sku": potion.sku,
-                        "name": potion.name,
-                        "quantity": potion.quantity,
-                        "price": potion.price, # TODO: set the price in supabase to 50?
-                        "potion_type": [potion.red, potion.green, potion.blue, potion.dark]
-                    }
-                )
+            potion_sql = connection.execute(sqlalchemy.text("SELECT * from potions WHERE potion_id = :potion_id"),
+                                            [{"potion_id": potion.potion_id}]).first()
+            if potion.inventory > 0:
+                catalog.append({
+                    "sku": potion_sql.item_sku,
+                    "name": potion_sql.name,
+                    "quantity": potion.inventory,
+                    "price": potion_sql.price,
+                    "potion_type": [potion_sql.red_ml, potion_sql.green_ml, potion_sql.blue_ml, potion_sql.dark_ml],
+                })
+
     return catalog
 
     '''
