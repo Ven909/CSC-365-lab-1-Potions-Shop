@@ -178,27 +178,45 @@ def get_bottle_plan():
                         available_green -= potion.green_ml * bottle_quantity
                         available_blue -= potion.blue_ml * bottle_quantity
                         available_dark -= potion.dark_ml * bottle_quantity
-            
-            print(f"Making {bottle_quantity} {potion.item_sku}")
+ 
+                print(f"Making {bottle_quantity} {potion.item_sku}")
 
     return bottle_plan
 
-# TODO: maybe revisit this        
-def how_many_to_bottle(potion, available_red, available_green, available_blue, available_dark):    
-    half_red = available_red / 2
-    half_green = available_green / 2
-    half_blue = available_blue / 2
-    half_dark = available_dark / 2
-    
-    # Calculate max bottles for each ingredient, or infinity if ingredient is not needed
-    red_made = half_red // potion.red_ml if potion.red_ml > 0 else float('inf')
-    green_made = half_green // potion.green_ml if potion.green_ml > 0 else float('inf')
-    blue_made = half_blue // potion.blue_ml if potion.blue_ml > 0 else float('inf')
-    dark_made = half_dark // potion.dark_ml if potion.dark_ml > 0 else float('inf')
-    
-    # Return the minimum number of bottles possible based on limiting ingredient
-    return int(min(red_made, green_made, blue_made, dark_made))
+# TODO: maybe revisit this
+def how_many_to_bottle(potion, available_red, available_green, available_blue, available_dark):
+    red_made = 999999999999
+    green_made = 999999999999
+    blue_made = 999999999999
+    dark_made = 999999999999
 
+    if potion.red_ml > 0:
+        red_made = int((available_red / 2) / potion.red_ml)
+    if potion.green_ml > 0:
+        green_made = int((available_green / 2) / potion.green_ml)
+    if potion.blue_ml > 0:
+        blue_made = int((available_blue / 2) / potion.blue_ml)
+    if potion.dark_ml > 0:
+        dark_made = int((available_dark / 2) / potion.dark_ml)
+    
+    return min(red_made, green_made, blue_made, dark_made)
+
+    '''        
+    def how_many_to_bottle(potion, available_red, available_green, available_blue, available_dark):    
+        half_red = available_red / 2
+        half_green = available_green / 2
+        half_blue = available_blue / 2
+        half_dark = available_dark / 2
+        
+        # Calculate max bottles for each ingredient, or infinity if ingredient is not needed
+        red_made = half_red // potion.red_ml if potion.red_ml > 0 else float('inf')
+        green_made = half_green // potion.green_ml if potion.green_ml > 0 else float('inf')
+        blue_made = half_blue // potion.blue_ml if potion.blue_ml > 0 else float('inf')
+        dark_made = half_dark // potion.dark_ml if potion.dark_ml > 0 else float('inf')
+        
+        # Return the minimum number of bottles possible based on limiting ingredient
+        return int(min(red_made, green_made, blue_made, dark_made))
+    '''
     '''
     V2 code
     bottle_plan = []

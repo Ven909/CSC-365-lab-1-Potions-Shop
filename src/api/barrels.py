@@ -25,92 +25,51 @@ def post_deliver_barrels(barrels_delivered: list[Barrel], order_id: int):
     
     print(f"barrels delievered: {barrels_delivered} order_id: {order_id}")
 
-    with db.engine.begin() as connection:
+    #with db.engine.begin() as connection:
         
-        red_ml = 0
-        green_ml = 0
-        blue_ml = 0
-        dark_ml = 0
-        gold = 0
+    red_ml = 0
+    green_ml = 0
+    blue_ml = 0
+    dark_ml = 0
+    gold = 0
 
     for barrel_delivered in barrels_delivered:
         print(f'Purchased {barrel_delivered.quantity} of {barrel_delivered.sku}({barrel_delivered.ml_per_barrel}ml)')
 
         gold -= barrel_delivered.price * barrel_delivered.quantity
 
-        if barrel_delivered.potion_type == [1,0,0,0]:
+        if barrel_delivered.potion_type == [100,0,0,0]:
             red_ml += barrel_delivered.ml_per_barrel * barrel_delivered.quantity
             print(f'Adding {red_ml}ml of red')
-        elif barrel_delivered.potion_type == [0,1,0,0]:
+        elif barrel_delivered.potion_type == [0,100,0,0]:
             green_ml += barrel_delivered.ml_per_barrel * barrel_delivered.quantity
             print(f'Adding {green_ml}ml of green')
-        elif barrel_delivered.potion_type == [0,0,1,0]:
+        elif barrel_delivered.potion_type == [0,0,100,0]:
             blue_ml += barrel_delivered.ml_per_barrel * barrel_delivered.quantity
             print(f'Adding {blue_ml}ml of blue')
-        elif barrel_delivered.potion_type == [0,0,0,1]:
+        elif barrel_delivered.potion_type == [0,0,0,100]:
             dark_ml += barrel_delivered.ml_per_barrel * barrel_delivered.quantity
             print(f'Adding {dark_ml}ml of dark')
         else:
             raise Exception("Invalid potion type")
-            
-    connection.execute(
-        sqlalchemy.text(
-            """
-            INSERT INTO global_ledger
-            (gold_difference, red_difference, green_difference, blue_difference, dark_difference, order_id, order_type)
-            VALUES (:gold, :red_ml, :green_ml, :blue_ml, :dark_ml, :order_id, :order_type)
-            """), 
-        [{  "gold": gold,
-            "red_ml": red_ml, 
-            "green_ml": green_ml, 
-            "blue_ml": blue_ml, 
-            "dark_ml": dark_ml,
-            "order_id": order_id,
-            "order_type": "Barrels"}])
-
-    """ 
-    V2 code
-    with db.engine.begin() as connection:
-       result = connection.execute(sqlalchemy.text("SELECT * FROM global_inventory"))
-       
-    row = result.fetchone()
-    current_gold = row.gold
-    green_amt = row.num_green_ml
-    red_amt = row.num_red_ml
-    blue_amt = row.num_blue_ml
-
-    print(f"Existing Inventory: (green: {green_amt}ml) (red: {red_amt}ml) (blue: {blue_amt} ml) (gold: {current_gold}coins)")
-
-    barrel_cost = 0
-    added_green = 0
-    added_red = 0
-    added_blue = 0
-
-    for barrel in barrels_delivered:
-        if current_gold >= barrel.price:
-            if barrel.potion_type == [0, 1, 0, 0]:
-                added_green += (barrel.ml_per_barrel * barrel.quantity)
-            elif barrel.potion_type == [1, 0, 0, 0]:
-                added_red += (barrel.ml_per_barrel * barrel.quantity)
-            elif barrel.potion_type == [0, 0, 1, 0]:
-                added_blue += (barrel.ml_per_barrel * barrel.quantity)
-            barrel_cost += (barrel.price * barrel.quantity)
-        else:
-            return "not enough gold"
-
-    # deduct gold
-    updated_gold = current_gold - barrel_cost
     
-    updated_num_green_ml = green_amt + added_green
-    updated_num_red_ml = red_amt + added_red
-    updated_num_blue_ml = blue_amt + added_blue
-
-    # update table
-    with db.engine.begin() as connection:
-        result = connection.execute(sqlalchemy.text(f"UPDATE global_inventory SET num_green_ml = {updated_num_green_ml}, num_red_ml = {updated_num_red_ml}, num_blue_ml = {updated_num_blue_ml}, gold = {updated_gold}"))
-
-    print(f"Updated Inventory: (green: {updated_num_green_ml}ml) (red: {updated_num_red_ml}ml) (blue: {updated_num_blue_ml} ml) (gold: {updated_gold}coins)")    
-    """    
+    with db.engine.begin() as connection:        
+        connection.execute(sqlalchemy.text(
+                """
+                INSERT INTO global_ledger
+                (gold_difference, red_difference, green_difference, blue_difference, dark_difference, order_id, order_type)
+                VALUES (:gold, :red_ml, :green_ml, :blue_ml, :dark_ml, :order_id, :order_type)
+                """), 
+            {  
+                "gold": gold,
+                "red_ml": red_ml, 
+                "green_ml": green_ml, 
+                "blue_ml": blue_ml, 
+                "dark_ml": dark_ml,
+                "order_id": order_id,
+                "order_type": "Barrels"
+            })    
+    
     return "OK"
 
 # Gets called once a day
