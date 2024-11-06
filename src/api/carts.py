@@ -61,20 +61,78 @@ def search_orders(
     Your results must be paginated, the max results you can return at any
     time is 5 total line items.
     """
+    with db.engine.begin() as connection:        
+        metadata_obj = sqlalchemy.MetaData()
+        carts = sqlalchemy.Table('carts', metadata_obj, autoload_with= db.engine)
+        cart_items = sqlalchemy.Table('cart_items', metadata_obj, autoload_with= db.engine)
+        potions = sqlalchemy.Table('potions', metadata_obj, autoload_with= db.engine)
 
-    return {
-        "previous": "",
-        "next": "",
-        "results": [
-            {
-                "line_item_id": 1,
-                "item_sku": "1 oblivion potion",
-                "customer_name": "Scaramouche",
-                "line_item_total": 50,
-                "timestamp": "2021-01-01T00:00:00Z",
-            }
-        ],
-    }
+        search_result = sqlalchemy.select(
+            carts.c.cart_id,
+            carts.c.customer_name,
+            potions.c.item_sku,
+            cart_items.c.quantity,
+            carts.c.timestamp,
+            (cart_items.c.quantity * potions.c.price).label('line_total')
+        ).select_from(
+            carts.join(cart_items, carts.c.cart_id == cart_items.c.cart_id)
+                 .join(potions, cart_items.c.potion_id == potions.c.potion_id)
+        )
+
+        if sort_col is search_sort_options.customer_name:
+            sort_parameter = search_result.c.customer_name
+        elif sort_col is search_sort_options.item_sku:
+            sort_parameter = search_result.c.item_sku
+        elif sort_col is search_sort_options.line_item_total:
+            sort_parameter = search_result.c.line_total
+        elif sort_col is search_sort_options.timestamp:
+            sort_parameter = search_result.c.timestamp
+        else:
+            raise RuntimeError("No Sort Parameter Passed")
+        
+        search_values = (
+            sqlalchemy.select(
+                search_result.c.cart_id,
+                search_result.c.quantity,
+                search_result.c.item_sku,
+                search_result.c.line_total,
+                search_result.c.timestamp,
+                search_result.c.customer_name
+            ).select_from(search_result)
+        )
+
+        sorted_values = search_values
+        if customer_name != "":
+            sorted_values = sorted_values.where(
+                (search_result.c.customer_name.ilike(f"%{customer_name}%")))
+        if potion_sku != "":
+            sorted_values = sorted_values.where(
+                (search_result.c.item_sku.ilike(f"%{potion_sku}%")))
+        if sort_order == search_sort_order.desc: 
+            sorted_values = sorted_values.order_by(
+                sqlalchemy.desc(sort_parameter) if sort_order == search_sort_order.desc else sqlalchemy.desc(sort_parameter))
+
+        page = 0 if search_page == "" else int(search_page) * 5
+        result = connection.execute(search_values.limit(5).offset(page))
+        search_return = []
+        for row in result:
+            search_return.append(
+                    {
+                        "line_item_id": row.cart_id,
+                        "item_sku": f"{row.quantity} {row.item_sku}",
+                        "customer_name": row.customer_name,
+                        "line_item_total": row.line_total,
+                        "timestamp": row.timestamp,
+                    })
+        
+        prev_page = f"{(page//5) - 1}" if (page//5) >= 1 else ""
+        next_page = f"{(page//5) + 1}" if (connection.execute(search_values).rowcount - (page)) > 0 else ""
+    
+    return ({
+            "previous": prev_page,
+            "next": next_page,
+            "results": search_return
+        })
 
 
 class Customer(BaseModel):
