@@ -12,12 +12,6 @@ router = APIRouter(
     dependencies=[Depends(auth.get_api_key)],
 )
 
-# make a global cart ID variable for ease
-'''
-V2 code
-cart_id = 0
-cart_table = {} 
-'''
 
 class search_sort_options(str, Enum):
     customer_name = "customer_name"
@@ -37,30 +31,6 @@ def search_orders(
     sort_col: search_sort_options = search_sort_options.timestamp,
     sort_order: search_sort_order = search_sort_order.desc,
 ):
-    """
-    Search for cart line items by customer name and/or potion sku.
-
-    Customer name and potion sku filter to orders that contain the 
-    string (case insensitive). If the filters aren't provided, no
-    filtering occurs on the respective search term.
-
-    Search page is a cursor for pagination. The response to this
-    search endpoint will return previous or next if there is a
-    previous or next page of results available. The token passed
-    in that search response can be passed in the next search request
-    as search page to get that page of results.
-
-    Sort col is which column to sort by and sort order is the direction
-    of the search. They default to searching by timestamp of the order
-    in descending order.
-
-    The response itself contains a previous and next page token (if
-    such pages exist) and the results as an array of line items. Each
-    line item contains the line item id (must be unique), item sku, 
-    customer name, line item total (in gold), and timestamp of the order.
-    Your results must be paginated, the max results you can return at any
-    time is 5 total line items.
-    """
     with db.engine.begin() as connection:        
         metadata_obj = sqlalchemy.MetaData()
         carts = sqlalchemy.Table('carts', metadata_obj, autoload_with= db.engine)
