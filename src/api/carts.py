@@ -70,9 +70,9 @@ def search_orders(
 
         # Apply sorting direction
         if sort_order == search_sort_order.desc:
-            search_result = sqlalchemy.desc(sort_parameter)
+            search_result = search_result.order_by(sqlalchemy.desc(sort_parameter))
         else:
-            search_result = sqlalchemy.asc(sort_parameter)
+            search_result = search_result.order_by(sqlalchemy.asc(sort_parameter))
 
         # Handle pagination
         page = int(search_page) if search_page.isdigit() else 0
